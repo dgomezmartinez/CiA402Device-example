@@ -35,8 +35,15 @@ public:
 
 
     co_msg SetCanOpenMsg();
-private:
 
+    int WaitForReadMessage(co_msg &output, unsigned int canIndex);
+    long c2co(const can_msg &input, co_msg &output);
+    int SetCanOpenMsg(co_msg &msg_co);
+    int SetCanOpenMsg(co_msg &msg_co, uint8_t msg_start[]);
+    can_msg SetCanMsg(can_msg &msg, uint8_t msg_start[]);
+    co_msg SetCanOpenMsg(unsigned short nodeID, unsigned short fund_code, uint8_t msg_start[]);
+private:
+    int read_timeout(int fd, can_msg *buf, unsigned int timeout);
     long co2c(const co_msg & input, can_msg & output);
     can_msg send_msg;
     long prueba;

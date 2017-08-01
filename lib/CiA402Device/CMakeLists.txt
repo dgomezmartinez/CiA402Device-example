@@ -1,6 +1,6 @@
 project(CiA402Device)
 
-
+add_definitions(-DHICO_LE)
 
 # source files
 aux_source_directory(. CiA402Device_SRCS)

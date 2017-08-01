@@ -28,7 +28,7 @@
 
 /* Uncomment one of these if the test below fails for some reason */
 /* #define HICO_BE */
- #define HICO_LE
+
 #if !defined(HICO_LE) && !defined(HICO_BE) && !defined(__KERNEL__)
  #ifdef __BYTE_ORDER
   #if __BYTE_ORDER == __LITTLE_ENDIAN

@@ -1,4 +1,4 @@
-#include "CiA402DeviceICanbus.h"
+﻿#include "CiA402DeviceICanbus.h"
 
 //Constructor vacío (inicializa el can0)
 CiA402DeviceICanbus::CiA402DeviceICanbus()
@@ -36,6 +36,10 @@ long CiA402DeviceICanbus::Init(const vector<int> & new_canPorts, string canPort)
         portName=canPort+index.str();
         canPorts[canIndex] = open(portName.c_str(), O_RDWR);
 
+        if (canPorts[canIndex]<0){
+            err(1, "could not open node '%s'",portName.c_str());
+        }
+
         /* Reset the board. Which node is used for this doesn't matter */
         if(ioctl(canPorts[canIndex],IOC_RESET_BOARD)!=0){
         err(1, "could not reset board");
@@ -57,12 +61,8 @@ long CiA402DeviceICanbus::Init(const vector<int> & new_canPorts, string canPort)
 }
 
 //Funcion para construir mensaje en CanBus
-can_msg CiA402DeviceICanbus::SetCanMsg()
+can_msg CiA402DeviceICanbus::SetCanMsg(can_msg & msg, uint8_t msg_start[])
 {
-    can_msg msg;
-    uint8_t msg_start[] = {0x81,0x01};// en amensajes de red primer byte el comando y segundo el ID
-    //uint8_t msg_stop[] = {0x81,0x00};//Ver que mandar
-    /* Compose a CAN message with some dummy data */
     msg.ff = FF_NORMAL;
     msg.id = 0x00;//x0B; 00 mensaje de red
     //tx_msg.id = 0x08;
@@ -74,22 +74,21 @@ can_msg CiA402DeviceICanbus::SetCanMsg()
     return msg;
 }
 
-co_msg CiA402DeviceICanbus::SetCanOpenMsg(){
+co_msg CiA402DeviceICanbus::SetCanOpenMsg(unsigned short nodeID, unsigned short fund_code, uint8_t msg_start[]){
 
     co_msg msg_co;
-    uint8_t msg_start[] = {0x81,0x01};
-    memcpy(msg_co.data_co, msg_start, 2*sizeof(uint8_t));
     msg_co.id_co=0;
-//    msg_co.nodeID=0;
-//    msg_co.rtr=0;
-
-
+    memcpy(msg_co.data_co, msg_start, 2*sizeof(uint8_t));
+    msg_co.nodeID=nodeID;
+    msg_co.rtr=0;
+    msg_co.fun_code=fund_code;
+    cout<<(bitset<16>)msg_co.id_co<<endl;
+    return msg_co;
 }
 
 /* Transforma mensaje de canopen a can y lo envía a can0 */
 int CiA402DeviceICanbus::SendMessage(co_msg input, unsigned int canIndex)
 {
-    send_msg=SetCanMsg();
     if (co2c(input,send_msg) < 0){
         cout<<"Error al transformar el mensaje"<<endl;
     }
@@ -100,6 +99,31 @@ int CiA402DeviceICanbus::SendMessage(co_msg input, unsigned int canIndex)
         if(write(canPorts[canIndex],&send_msg,sizeof(struct can_msg))!=sizeof(send_msg)){
         err(1, "Failed to send message");
         }
+    }
+    return 0;
+}
+
+int CiA402DeviceICanbus::WaitForReadMessage(co_msg & output, unsigned int canIndex){
+#define USE_TIMEOUT 2
+    can_msg input;
+    output.id_co=0;
+    #if USE_TIMEOUT
+        if(read_timeout(canPorts[canIndex],&input,500)==0){
+        err(1,"timeout - could not read the message. Check the cable!");
+        }
+
+    #else
+        if(read(canPorts[canIndex],&input,sizeof(struct can_msg) !=sizeof(input)){
+        err(1,"read");
+        }
+    #endif
+
+    if(c2co(input, output)!=0){
+       err(1,"error al convertir el mensaje");
+    }
+    else{
+        cout<< endl<<output.id_co<<endl;
+        cout<<(bitset<16>)output.id_co<<endl;
     }
     return 0;
 }
@@ -117,4 +141,48 @@ long CiA402DeviceICanbus::co2c(const co_msg & input, can_msg & output)
         output.data[i] = input.data_co[i];
     }
     return 0;
+}
+/* Función para convertir de can a canopen */
+long CiA402DeviceICanbus::c2co(const can_msg & input, co_msg & output)
+{
+
+    output.dlc_co=input.dlc;
+    output.id_co=input.id;
+    output.id_co<<=1;
+    output.rtr=input.rtr;
+    output.ts=input.ts;
+
+    for( int i=0; i < 8; i++)
+    {
+        output.data_co[i] = input.data[i];
+    }
+
+    return 0;
+}
+
+int CiA402DeviceICanbus::read_timeout(int fd, struct can_msg *buf, unsigned int timeout)
+{
+    fd_set fds;
+    struct timeval tv;
+    int sec,ret;
+    FD_ZERO(&fds);
+
+    sec=timeout/1000;
+    tv.tv_sec=sec;
+    tv.tv_usec=(timeout-(sec*1000))*1000;
+
+    FD_SET(fd,&fds);
+
+    ret=select(fd+1,&fds,0,0,&tv);
+
+    if(ret==0){
+    return 0; /* timeout */
+    } else if (ret<0) {
+    return errno;
+    } else {
+    assert(FD_ISSET(fd,&fds));
+    ret=read(fd,buf,sizeof(struct can_msg));
+
+    return ret;
+    }
 }
