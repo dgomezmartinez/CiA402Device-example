@@ -18,5 +18,6 @@ int main(int argc, char *argv[])
             cout<<"error al recibir el mensaje"<<endl;
         }
     }
+    cout << "hello";
     return 0;
 }
