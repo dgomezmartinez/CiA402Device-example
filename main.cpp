@@ -7,14 +7,17 @@ using namespace std;
 int main(int argc, char *argv[])
 {
     CiA402DeviceICanbus com;
-    co_msg msg;
-    uint8_t msg_start[]={0};
-    msg=com.SetCanOpenMsg(0,0,msg_start);
-    if (com.SendMessage(msg,0)<0){
+    can_msg can;
+    co_msg input;
+    co_msg output;
+    uint8_t msg_start[]={0x81,0x00};
+    com.SetCanMsg(can,msg_start);
+    com.c2co(can,input);
+    if (com.SendMessage(input,0)<0){
         cout<<"error al enviar el mensaje"<<endl;
     }
     else{
-        if (com.WaitForReadMessage(msg,0)<0){
+        if (com.WaitForReadMessage(output,0)<0){
             cout<<"error al recibir el mensaje"<<endl;
         }
     }

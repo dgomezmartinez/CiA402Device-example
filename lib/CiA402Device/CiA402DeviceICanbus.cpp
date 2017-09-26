@@ -110,6 +110,7 @@ int CiA402DeviceICanbus::WaitForReadMessage(co_msg & output, unsigned int canInd
     #if USE_TIMEOUT
         if(read_timeout(canPorts[canIndex],&input,500)==0){
         err(1,"timeout - could not read the message. Check the cable!");
+        return -1;
         }
 
     #else
@@ -120,10 +121,16 @@ int CiA402DeviceICanbus::WaitForReadMessage(co_msg & output, unsigned int canInd
 
     if(c2co(input, output)!=0){
        err(1,"error al convertir el mensaje");
+       return -1;
     }
     else{
-        cout<< endl<<output.id_co<<endl;
+        //cout<< endl<<output.id_co<<endl;
         cout<<(bitset<16>)output.id_co<<endl;
+        for (int i = 0; i < 8; i++) {
+        printf("%02x ",output.data_co[i]);
+        }
+        cout<<endl;
+
     }
     return 0;
 }
@@ -174,7 +181,7 @@ int CiA402DeviceICanbus::read_timeout(int fd, struct can_msg *buf, unsigned int 
     FD_SET(fd,&fds);
 
     ret=select(fd+1,&fds,0,0,&tv);
-
+    cout<<ret<<endl;
     if(ret==0){
     return 0; /* timeout */
     } else if (ret<0) {
