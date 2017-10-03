@@ -30,32 +30,32 @@ long CiA402DeviceICanbus::Init(const vector<int> & new_canPorts, string canPort)
     canPorts=new_canPorts;
 
 
-    for(int canIndex=0;canIndex<canPorts.size();canIndex++)
-    {
-        index<<canIndex;
-        portName=canPort+index.str();
-        canPorts[canIndex] = open(portName.c_str(), O_RDWR);
+//    for(int canIndex=0;canIndex<canPorts.size();canIndex++)
+//    {
+//        index<<canIndex;
+//        portName=canPort+index.str();
+//        canPorts[canIndex] = open(portName.c_str(), O_RDWR);
 
-        if (canPorts[canIndex]<0){
-            err(1, "could not open node '%s'",portName.c_str());
-        }
+//        if (canPorts[canIndex]<0){
+//            err(1, "could not open node '%s'",portName.c_str());
+//        }
 
-        /* Reset the board. Which node is used for this doesn't matter */
-        if(ioctl(canPorts[canIndex],IOC_RESET_BOARD)!=0){
-        err(1, "could not reset board");
-        }
+//        /* Reset the board. Which node is used for this doesn't matter */
+//        if(ioctl(canPorts[canIndex],IOC_RESET_BOARD)!=0){
+//        err(1, "could not reset board");
+//        }
 
-        /* Set baudrate for both nodes */
-        val=BITRATE_1000k;
-        if(ioctl(canPorts[canIndex],IOC_SET_BITRATE,&val)!=0){
-        err(1, "could not set bitrate");
-        }
+//        /* Set baudrate for both nodes */
+//        val=BITRATE_1000k;
+//        if(ioctl(canPorts[canIndex],IOC_SET_BITRATE,&val)!=0){
+//        err(1, "could not set bitrate");
+//        }
 
-        /* Start both CAN nodes */
-        if(ioctl(canPorts[canIndex],IOC_START)!=0){
-        err(1, "IOC_START");
-        }
-    }
+//        /* Start both CAN nodes */
+//        if(ioctl(canPorts[canIndex],IOC_START)!=0){
+//        err(1, "IOC_START");
+//        }
+//    }
 
     return 0;
 }
@@ -74,15 +74,30 @@ can_msg CiA402DeviceICanbus::SetCanMsg(can_msg & msg, uint8_t msg_start[])
     return msg;
 }
 
-co_msg CiA402DeviceICanbus::SetCanOpenMsg(unsigned short nodeID, unsigned short fund_code, uint8_t msg_start[]){
+/**
+ * @brief CiA402DeviceICanbus::SetCanOpenMsg : Constructs canopen message from parameters
+ * @param id_co: cob id canopen parameter.
+ * @param rtr: request for remote.
+ * @param msg_start : canopen data frame.
+ * @return : canopen constructed message in co_msg data type.
+ */
+
+co_msg CiA402DeviceICanbus::SetCanOpenMsg(unsigned short id_co, unsigned short rtr, vector<uint8_t> coDataFrame){
 
     co_msg msg_co;
-    msg_co.id_co=0;
-    memcpy(msg_co.data_co, msg_start, 2*sizeof(uint8_t));
-    msg_co.nodeID=nodeID;
-    msg_co.rtr=0;
-    msg_co.fun_code=fund_code;
+    msg_co.id_co=id_co;
+    msg_co.dlc_co=coDataFrame.size();
+
+    memcpy(msg_co.data_co, coDataFrame.data(), (msg_co.dlc_co)*sizeof(uint8_t));
+    //msg_co.nodeID=nodeID;
+    msg_co.rtr=rtr;
+    //msg_co.fun_code=fund_code;
     cout<<(bitset<16>)msg_co.id_co<<endl;
+    cout<< "----------------------" << msg_co.dlc_co<<endl;
+    for (int i = 0; i < 8; i++) {
+        printf("%02x ",msg_co.data_co[i]);
+    }
+
     return msg_co;
 }
 
@@ -104,11 +119,11 @@ int CiA402DeviceICanbus::SendMessage(co_msg input, unsigned int canIndex)
 }
 
 int CiA402DeviceICanbus::WaitForReadMessage(co_msg & output, unsigned int canIndex){
-#define USE_TIMEOUT 2
+#define USE_TIMEOUT 200
     can_msg input;
-    output.id_co=0;
+    //output.id_co=0;
     #if USE_TIMEOUT
-        if(read_timeout(canPorts[canIndex],&input,500)==0){
+        if(read_timeout(canPorts[canIndex],&input,5000)==0){
         err(1,"timeout - could not read the message. Check the cable!");
         return -1;
         }
@@ -127,7 +142,7 @@ int CiA402DeviceICanbus::WaitForReadMessage(co_msg & output, unsigned int canInd
         //cout<< endl<<output.id_co<<endl;
         cout<<(bitset<16>)output.id_co<<endl;
         for (int i = 0; i < 8; i++) {
-        printf("%02x ",output.data_co[i]);
+            printf("%02x ",output.data_co[i]);
         }
         cout<<endl;
 
@@ -137,12 +152,16 @@ int CiA402DeviceICanbus::WaitForReadMessage(co_msg & output, unsigned int canInd
 
 long CiA402DeviceICanbus::co2c(const co_msg & input, can_msg & output)
 {
+   //creo que no hay que desplazar
     output.id=input.id_co>>1;
-    output.fi=input.id_co;
-    output.fi<<=4;
-    output.fi+=input.dlc_co;
+    //output.fi=input.id_co;
+    //output.fi<<=4;
+    //output.fi+=input.dlc_co;
+    output.dlc=input.dlc_co;
+    output.rtr=input.rtr;
+    output.ff=FF_NORMAL;
     output.ts=input.ts;
-
+    // creo que en vez de 8 poner dlc
     for( int i=0; i < 8; i++)
     {
         output.data[i] = input.data_co[i];
@@ -153,11 +172,14 @@ long CiA402DeviceICanbus::co2c(const co_msg & input, can_msg & output)
 long CiA402DeviceICanbus::c2co(const can_msg & input, co_msg & output)
 {
 
+   //verificar el bit de start to frame de can
+
     output.dlc_co=input.dlc;
     output.id_co=input.id;
     output.id_co<<=1;
     output.rtr=input.rtr;
     output.ts=input.ts;
+
 
     for( int i=0; i < 8; i++)
     {
